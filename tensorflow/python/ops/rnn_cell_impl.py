@@ -471,6 +471,24 @@ class LSTMStateTuple(_LSTMStateTuple):
                       (str(c.dtype), str(h.dtype)))
     return c.dtype
 
+lowp_so_path = "/nfs_home/dvooturi/projects/tf-custom/lowp/lowp_ops.so"
+#lowp_so_path = "/nfs_home/dvooturi/projects/tf-custom/gpu_f2bf2f/f2bf2f.so"
+
+@ops.RegisterGradient("FloatToBfloatToFloat")
+def _float_to_bfloat_to_float_grad(op, grad):
+        # Loading down sampling module
+        from tensorflow.contrib.util.loader import load_op_library
+        low_ops = load_op_library(lowp_so_path)
+        quant_func = low_ops.float_to_bfloat_to_float
+	return [quant_func(grad)]  # List of one Tensor, since we have one input
+
+@ops.RegisterGradient("FloatToDfpToFloat")
+def _float_to_dfp_to_float_grad(op, grad):
+        # Loading down sampling module
+        from tensorflow.contrib.util.loader import load_op_library
+        lowp_ops = load_op_library(lowp_so_path)
+        quant_func = lowp_ops.float_to_dfp_to_float
+	return [quant_func(grad)]  # List of one Tensor, since we have one input
 
 @tf_export("nn.rnn_cell.BasicLSTMCell")
 class BasicLSTMCell(_LayerRNNCell):
@@ -547,7 +565,7 @@ class BasicLSTMCell(_LayerRNNCell):
         _BIAS_VARIABLE_NAME,
         shape=[4 * self._num_units],
         initializer=init_ops.zeros_initializer(dtype=self.dtype))
-
+    
     self.built = True
 
   def call(self, inputs, state):
@@ -573,9 +591,35 @@ class BasicLSTMCell(_LayerRNNCell):
     else:
       c, h = array_ops.split(value=state, num_or_size_splits=2, axis=one)
 
-    gate_inputs = math_ops.matmul(
-        array_ops.concat([inputs, h], 1), self._kernel)
-    gate_inputs = nn_ops.bias_add(gate_inputs, self._bias)
+    EMULATE_LOW_PREC = True
+    LOW_PREC_TYPE = "f2dfp2f"
+
+    if EMULATE_LOW_PREC:
+        # Loading down sampling module
+        from tensorflow.contrib.util.loader import load_op_library
+        lowp_ops = load_op_library(lowp_so_path)
+        
+	if LOW_PREC_TYPE == "f2bf2f":
+		quant_func = lowp_ops.float_to_bfloat_to_float
+	elif LOW_PREC_TYPE == "f2dfp2f":
+		quant_func = lowp_ops.float_to_dfp_to_float
+	else:
+		print("Unspported low precision type")
+		exit(-1)
+
+        # Down sampling
+        kernel_ds = quant_func(self._kernel)
+        inputs_ds = quant_func(inputs)
+        h_ds = quant_func(h)
+
+        gate_inputs = math_ops.matmul(
+            array_ops.concat([inputs_ds, h_ds], 1), kernel_ds)
+        gate_inputs = quant_func(gate_inputs) # Downsampling fp32 accumulation
+        gate_inputs = nn_ops.bias_add(gate_inputs, self._bias)
+    else:
+        gate_inputs = math_ops.matmul(
+            array_ops.concat([inputs, h], 1), self._kernel)
+        gate_inputs = nn_ops.bias_add(gate_inputs, self._bias)
 
     # i = input_gate, j = new_input, f = forget_gate, o = output_gate
     i, j, f, o = array_ops.split(
