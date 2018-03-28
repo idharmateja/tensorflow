@@ -634,9 +634,8 @@ class BasicLSTMCell(_LayerRNNCell):
 
 		gate_inputs = math_ops.matmul(
 		    array_ops.concat([inputs_ds, h_ds], 1), kernel_ds)
-		gate_inputs = quant_func(gate_inputs, mbits=act_mbits) # Downsampling fp32 accumulation
-			
-		
+		gate_inputs = quant_func(gate_inputs, mbits=act_mbits) # Downsampling fp32 accumulation	
+		gate_inputs = nn_ops.bias_add(gate_inputs, self._bias)
     else:
         gate_inputs = math_ops.matmul(
             array_ops.concat([inputs, h], 1), self._kernel)
