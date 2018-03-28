@@ -478,9 +478,13 @@ lowp_so_path = "/home/exx/dvooturi/projects/tf-custom/lowp/lowp_ops.so"
 EMULATE_LOW_PREC = True
 LOW_PREC_TYPE = "f2dfp2f" #{f2bf2f,f2dfp2f}
 
-# Parameters applied when LOW_PREC_TYPE = f2dfp2f
-act_mbits  = 16
-grad_mbits = 16
+# Configuration used when LOW_PREC_TYPE = f2dfp2f
+
+mbits_act_fwd = 16
+mbits_weights_fwd  = 16
+
+mbits_act_bwd = mbits_act_fwd
+mbits_weights_bwd  = mbits_weights_fwd
 
 #**********************************************************************
 
@@ -498,7 +502,8 @@ def _float_to_dfp_to_float_grad(op, grad):
         from tensorflow.contrib.util.loader import load_op_library
         lowp_ops = load_op_library(lowp_so_path)
         quant_func = lowp_ops.float_to_dfp_to_float
-	return [quant_func(grad, mbits=grad_mbits)]  # List of one Tensor, since we have one input
+ 	#print(op.get_attr("mbits_fwd"))
+	return [quant_func(grad, mbits_fwd=op.get_attr("mbits_bwd"), mbits_bwd=op.get_attr("mbits_fwd"))]  # List of one Tensor, since we have one input
 
 @tf_export("nn.rnn_cell.BasicLSTMCell")
 class BasicLSTMCell(_LayerRNNCell):
@@ -628,13 +633,13 @@ class BasicLSTMCell(_LayerRNNCell):
 		gate_inputs = nn_ops.bias_add(gate_inputs_ds, self._bias)
 	elif LOW_PREC_TYPE == "f2dfp2f":
 		# Down sampling
-		kernel_ds = quant_func(self._kernel, mbits=grad_mbits)
-		inputs_ds = quant_func(inputs, mbits=act_mbits)
-		h_ds = quant_func(h, mbits=act_mbits)
+		kernel_ds = quant_func(self._kernel, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd)
+		inputs_ds = quant_func(inputs,  mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		h_ds = quant_func(h, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
 
 		gate_inputs = math_ops.matmul(
 		    array_ops.concat([inputs_ds, h_ds], 1), kernel_ds)
-		gate_inputs_ds = quant_func(gate_inputs, mbits=act_mbits) # Downsampling fp32 accumulation	
+		gate_inputs_ds = quant_func(gate_inputs, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd) # Downsampling fp32 accumulation	
 		gate_inputs = nn_ops.bias_add(gate_inputs_ds, self._bias)
     else:
         gate_inputs = math_ops.matmul(
