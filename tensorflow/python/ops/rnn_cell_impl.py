@@ -473,15 +473,16 @@ class LSTMStateTuple(_LSTMStateTuple):
 
 #******************** LOW PRECISION CONFIGURATION **********************
 #lowp_so_path = "/nfs_home/dvooturi/projects/tf-custom/lowp/lowp_ops.so"
-lowp_so_path = "/home/exx/dvooturi/projects/tf-custom/lowp/lowp_ops.so"
+#lowp_so_path = "/home/exx/dvooturi/projects/tf-custom/lowp/lowp_ops.so"
+lowp_so_path = "/home/exx/nkmellem/tensorflow-private/tf-custom/lowp/lowp_ops_v1.so"
 
 EMULATE_LOW_PREC = True
 LOW_PREC_TYPE = "f2dfp2f" #{f2bf2f,f2dfp2f}
 
 # Configuration used when LOW_PREC_TYPE = f2dfp2f
 
-mbits_act_fwd = 16
-mbits_weights_fwd  = 16
+mbits_act_fwd = 8
+mbits_weights_fwd  = 8
 
 mbits_act_bwd = mbits_act_fwd
 mbits_weights_bwd  = mbits_weights_fwd
@@ -633,9 +634,34 @@ class BasicLSTMCell(_LayerRNNCell):
 		gate_inputs = nn_ops.bias_add(gate_inputs_ds, self._bias)
 	elif LOW_PREC_TYPE == "f2dfp2f":
 		# Down sampling
-		kernel_ds = quant_func(self._kernel, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd)
-		inputs_ds = quant_func(inputs,  mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
-		h_ds = quant_func(h, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		#kernel_ds = quant_func(self._kernel, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd)
+		#inputs_ds = quant_func(inputs,  mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		#h_ds = quant_func(h, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+
+		ini, inj, inf, ino = array_ops.split(value=inputs, num_or_size_splits=4, axis=one)
+		iniq = quant_func(ini, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		injq = quant_func(inj, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		infq = quant_func(inf, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		inoq = quant_func(ino, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+                inputs_ds = array_ops.concat([iniq, injq, infq, inoq], 1)
+
+		hi, hj, hf, ho = array_ops.split(value=h, num_or_size_splits=4, axis=one)
+		hiq = quant_func(hi, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		hjq = quant_func(hj, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		hfq = quant_func(hf, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+		hoq = quant_func(ho, mbits_fwd=mbits_act_fwd, mbits_bwd=mbits_act_bwd)
+                h_ds = array_ops.concat([hiq, hjq, hfq, hoq], 1)
+
+		wi, wj, wf, wo = array_ops.split(value=self._kernel, num_or_size_splits=4, axis=one)
+		#wiq = quant_func(wi, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd)
+		#wjq = quant_func(wj, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd)
+		#wfq = quant_func(wf, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd)
+		#woq = quant_func(wo, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd)
+                kernel_ds = array_ops.concat([
+			quant_func(wi, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd),
+			quant_func(wj, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd),
+			quant_func(wf, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd),
+			quant_func(wo, mbits_fwd=mbits_weights_fwd, mbits_bwd=mbits_weights_bwd)], 1)
 
 		gate_inputs = math_ops.matmul(
 		    array_ops.concat([inputs_ds, h_ds], 1), kernel_ds)
