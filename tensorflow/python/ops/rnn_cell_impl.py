@@ -686,33 +686,19 @@ class BasicLSTMCell(LayerRNNCell):
 		gate_inputs = nn_ops.bias_add(gate_inputs_ds, self._bias)
  	elif LOW_PREC_TYPE == "f2trn2f":
 		# Down sampling
-                #blockSize = (self._kernel).size / 4
-
-		inputs_ds = quant_func(inputs, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=inputs.name, block_size=blockSize, flag_weight=False)
+		#if flag_weight=False, then the following parameters do not matter: mbits_alpha, tensor_name, block_size
+                inputs_ds = quant_func(inputs, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=inputs.name, block_size=blockSize, flag_weight=False)
 		h_ds = quant_func(h, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=h.name, block_size=blockSize, flag_weight=False)
-                '''
-		ini, inj, inf, ino = array_ops.split(value=inputs, num_or_size_splits=4, axis=one)
-		iniq = quant_func(ini, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=inputs.name, block_size=blockSize, flag_weight=False)
-		injq = quant_func(inj, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=inputs.name, block_size=blockSize, flag_weight=False)
-		infq = quant_func(inf, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=inputs.name, block_size=blockSize, flag_weight=False)
-		inoq = quant_func(ino, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=inputs.name, block_size=blockSize, flag_weight=False)
-                inputs_ds = array_ops.concat([iniq, injq, infq, inoq], 1)
-
-		hi, hj, hf, ho = array_ops.split(value=h, num_or_size_splits=4, axis=one)
-		hiq = quant_func(hi, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=h.name, block_size=blockSize, flag_weight=False)
-		hjq = quant_func(hj, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=h.name, block_size=blockSize, flag_weight=False)
-		hfq = quant_func(hf, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=h.name, block_size=blockSize, flag_weight=False)
-		hoq = quant_func(ho, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=h.name, block_size=blockSize, flag_weight=False)
-                h_ds = array_ops.concat([hiq, hjq, hfq, hoq], 1)
-                '''
 		kernel_ds = quant_func(self._kernel, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
-		#ki, kj, kf, ko = array_ops.split(value=self._kernel, num_or_size_splits=4, axis=one)
-		#kiq = quant_func(ki, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
-		#kjq = quant_func(kj, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
-		#kfq = quant_func(kf, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
-		#koq = quant_func(ko, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
-                #kernel_ds = array_ops.concat([kiq, kjq, kfq, koq], 1)
-
+                '''
+                #blockSize = (self._kernel).size / 4
+		ki, kj, kf, ko = array_ops.split(value=self._kernel, num_or_size_splits=4, axis=one)
+		kiq = quant_func(ki, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
+		kjq = quant_func(kj, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
+		kfq = quant_func(kf, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
+		koq = quant_func(ko, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=self._kernel.name, block_size=blockSize, flag_weight=True)
+                kernel_ds = array_ops.concat([kiq, kjq, kfq, koq], 1)
+                '''
 		gate_inputs = math_ops.matmul(
 		    array_ops.concat([inputs_ds, h_ds], 1), kernel_ds)
 		gate_inputs_ds = quant_func(gate_inputs, mbits_fwd=mbits_act_fwd, mbits_alpha=mbits_weights_alpha, tensor_name=gate_inputs.name, block_size=blockSize, flag_weight=False) # Downsampling fp32 accumulation
